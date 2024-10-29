@@ -1,0 +1,3 @@
+all:
+	gcc 8to16.c both.c -Wall -o 8to16
+	gcc 16to8.c both.c -Wall -o 16to8
