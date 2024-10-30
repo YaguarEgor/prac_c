@@ -33,6 +33,9 @@ int getWordsFromLine(FILE* inp, char*** mas_of_words, int* number_of_words, int*
         special_symbol_is_used = 0;
         if (buf == EOF || buf == '\n') {
             *code = buf == EOF ? END : NL;
+            if (symbols_in_quotes) {
+                fprintf(stderr, "There are not closing quotes, I have closed them for you\n");
+            }
             if (len_of_word > 1) {
                 (*mas_of_words)[n-1] = word;
                 return n;
