@@ -44,7 +44,6 @@ void getAllCommands(FILE* inp, char*** mas_of_words, int* number_of_words) {
         freeMemory(*mas_of_words, *number_of_words + 1);
         *mas_of_words = NULL;
         (*number_of_words) = 0;
-        fprintf(stdout, "\n");
     }
 }
 
