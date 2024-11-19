@@ -1,0 +1,5 @@
+all:
+	gcc 1.c -Wall -o 1
+	gcc 2.c -Wall -o 2
+	gcc 3.c -Wall -o 3
+	gcc blue_3.c -Wall -o blue_3
