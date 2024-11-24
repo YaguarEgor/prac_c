@@ -1,3 +1,7 @@
+//headers
+#include "reading.h"
+#include <stdio.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -6,20 +10,12 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <sys/wait.h>
-
-#define NL 1
-#define END 2
-#define SPECIALSYMBOLS "&|;><()"
-
-int executeCommands(char*** commands, int* number_of_commands);
-
-int getWordsFromLine(FILE* inp, char*** mas_of_words, int* number_of_words, int* code);
-
-void freeMemory(char** mas_words, int len);
-
-void getAllCommands(FILE* inp, char*** mas_of_words, int* number_of_words);
+#include <signal.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 
 int main(int argc, char** argv) {
+    signal(SIGINT, SIG_IGN);
     FILE* input = NULL;
     if (argc > 1) {
         input = fopen(argv[1], "r");
@@ -29,127 +25,21 @@ int main(int argc, char** argv) {
     int len = 0;
     char** mas_of_words = NULL;
     getAllCommands(input, &mas_of_words, &len);
-    
     return 0;
 }
 
-
-void getAllCommands(FILE* inp, char*** mas_of_words, int* number_of_words) {
-    int code = 0;
-    while (code != END) {
-        (*number_of_words) = getWordsFromLine(inp, mas_of_words, number_of_words, &code);
-        if ((*mas_of_words)[0]) {
-            executeCommands(mas_of_words, number_of_words);
-        }
-        freeMemory(*mas_of_words, *number_of_words + 1);
-        *mas_of_words = NULL;
-        (*number_of_words) = 0;
-    }
-}
-
-
-int getWordsFromLine(FILE* inp, char*** mas_of_words, int* number_of_words, int* code) {
-    int special_symbol_is_used = 0;
-    int symbols_in_quotes = 0;
-    long long int len_of_word = 1;
-    int n = *number_of_words;
-
-    n ++;
-    (*mas_of_words) = (char**)realloc((*mas_of_words), n*sizeof(char*));
-    (*mas_of_words)[n-1] = NULL;
-
-    char* word = NULL;
-    word = (char*)malloc(len_of_word*sizeof(char));
-    word[0] = '\0';
-
-    if (word == NULL || (*mas_of_words) == NULL) {
-        return -1;
-    }
-    int buf;
-    while (1) {
-        if (!special_symbol_is_used) 
-            buf = getc(inp);
-        special_symbol_is_used = 0;
-        if (buf == EOF || buf == '\n') {
-            if (buf == EOF || (buf == '\n' && !symbols_in_quotes)) {
-                *code = buf == EOF ? END : NL;
-                if (symbols_in_quotes) {
-                    fprintf(stderr, "\nThere are not closing quotes, I have closed them for you\n");
-                }
-                if (len_of_word > 1) {
-                    (*mas_of_words)[n-1] = word;
-                    return n;
-                }
-                else {
-                    free(word);
-                    return n-1;
-                }
-            }
-            
-        }
-        else if (buf == '"') {
-            if (symbols_in_quotes)
-                symbols_in_quotes = 0;
-            else 
-                symbols_in_quotes = 1;
-        }
-        else if (isspace(buf) && !symbols_in_quotes) {
-            if (len_of_word > 1) {
-                (*mas_of_words)[n-1] = word;
-                n++;
-                (*mas_of_words) = (char**)realloc((*mas_of_words), n*sizeof(char*)); 
-                (*mas_of_words)[n-1] = NULL;
-                len_of_word = 1;
-                word = (char*)malloc(len_of_word*sizeof(char));
-                word[0] = '\0';
-            }
-        }
-        else if (strchr(SPECIALSYMBOLS, buf) && !symbols_in_quotes) {
-            if (len_of_word > 1) {
-                (*mas_of_words)[n-1] = word;
-                n++;
-                (*mas_of_words) = (char**)realloc((*mas_of_words), n*sizeof(char*)); 
-                (*mas_of_words)[n-1] = NULL;
-                len_of_word = 2;
-                word = (char*)malloc(len_of_word*sizeof(char));
-            }
-            else {
-                len_of_word ++;
-                word = (char*)realloc(word, len_of_word*sizeof(char));
-            }
-            word[0] = buf;
-            word[1] = '\0';
-            buf = fgetc(inp);
-            if (buf != '&' && buf != '|' && buf != '>') {
-                special_symbol_is_used = 1;
-            }
-            else {
-                len_of_word ++;
-                word = (char*)realloc(word, len_of_word*sizeof(char));
-                word[1] = buf;
-                word[2] = '\0';
-            }
-            (*mas_of_words)[n-1] = word;
-            n++;
-            (*mas_of_words) = (char**)realloc((*mas_of_words), n*sizeof(char*)); 
-            (*mas_of_words)[n-1] = NULL;
-            len_of_word = 1;
-            word = (char*)malloc(len_of_word*sizeof(char));
-            word[0] = '\0';
+int executeCommands(char*** commands, int* number_of_commands) {
+    pid_t pid_bcg;
+    int status;
+    if ((pid_bcg = waitpid(0, &status, WNOHANG)) > 0) {
+        if (WIFEXITED(status)) {
+            printf("\nProcess %d exited with code %d\n", pid_bcg, WEXITSTATUS(status));
         }
         else {
-            word[len_of_word-1] = buf;
-            len_of_word++;
-            word = (char*)realloc(word, len_of_word*sizeof(char));
-            word[len_of_word-1] = '\0';
+            printf("\nProcess %d aborted by signal %d\n", pid_bcg, WEXITSTATUS(status));
         }
-
     }
-    return -1;
-}
-
-
-int executeCommands(char*** commands, int* number_of_commands) {
+    
     (*commands) = (char**)realloc((*commands), (*number_of_commands+1)*sizeof(char*));
     (*commands)[*number_of_commands] = (char*)0;
     if (strcmp((*commands)[0], "cd") == 0) {
@@ -163,22 +53,49 @@ int executeCommands(char*** commands, int* number_of_commands) {
             }
         }
     }
+
     else {
+        int is_bcg_process = findBackgroundProcess(commands, *number_of_commands);
+        if (is_bcg_process > 1) {
+            fprintf(stderr, "There can not be two '&'\n");
+            return -1;
+        } 
         pid_t pid;
         if ((pid = fork()) < 0) {
             fprintf(stderr, "Error");
             return -1;
         }
         else if (!pid) {
-            execvp((*commands)[0], *commands);
+            int number_of_processes_in_conveyor = findConveyor(commands, *number_of_commands);
+            signal(SIGINT, SIG_DFL);
+            if (is_bcg_process) {
+                signal(SIGINT, SIG_IGN);
+                int fd = open("/dev/null", O_RDWR);
+                dup2(fd, 0);
+                close(fd);
+            }
+            if (number_of_processes_in_conveyor == 1) {
+                changeDirection(commands, *number_of_commands);
+                execvp((*commands)[0], *commands);
+            }
+            else if (number_of_processes_in_conveyor > 1) {
+                executeConveyor(commands, *number_of_commands, number_of_processes_in_conveyor);
+            }   
             perror("Error: Failed to find such command(2)\n");
-            return -1;
+            _exit(0); 
         }
-        wait(NULL);
+        if (!is_bcg_process) {
+            int status;
+            waitpid(pid, &status, 0);
+            if (WIFEXITED(status)) {
+                return WEXITSTATUS(status);
+            } else {
+                return 1;
+            }
+        }
     }
     return 0;
 }
-
 
 void freeMemory(char** mas_words, int len) {
     for (int i = 0; i < len; i++) {
@@ -186,3 +103,130 @@ void freeMemory(char** mas_words, int len) {
     }
     free(mas_words);
 }
+
+void changeDirection(char*** commands, int number_of_commands) {
+    int i = 0;
+    while (i < number_of_commands-1) {
+        if (!(*commands)[i]) {
+            break;
+        }
+        if (strcmp((*commands)[i], "<") == 0) {
+            int fd_in = open((*commands)[i+1], O_RDONLY);
+            if (fd_in != -1) {
+                dup2(fd_in, 0);
+                close(fd_in);
+            }
+            else {
+                fprintf(stderr, "Error with changing input stream\n");
+            }
+            int j = i+2;
+            while ((*commands)[j]) {
+                (*commands)[j-2] = (*commands)[j];
+                j ++;
+            }
+            (*commands)[j-2] = NULL;
+            i--;
+        }
+        if (strcmp((*commands)[i], ">") == 0) {
+            int fd_out = open((*commands)[i+1], O_WRONLY | O_CREAT | O_TRUNC, 0777);
+            if (fd_out != -1) {
+                dup2(fd_out, 1);
+                close(fd_out);
+            }
+            else {
+                fprintf(stderr, "Error with changing error stream\n");
+            }
+            int j = i+2;
+            while ((*commands)[j]) {
+                (*commands)[j-2] = (*commands)[j];
+                j ++;
+            }
+            (*commands)[j-2] = NULL;
+            i--;
+        }
+        if (strcmp((*commands)[i], ">>") == 0) {
+            int fd_out = open((*commands)[i+1], O_RDWR | O_APPEND | O_CREAT, 0777);
+            if (fd_out != -1) {
+                dup2(fd_out, 1);
+                close(fd_out);
+            }
+            else {
+                fprintf(stderr, "Error with changing error stream\n");
+            }
+            int j = i+2;
+            while ((*commands)[j]) {
+                (*commands)[j-2] = (*commands)[j];
+                j ++;
+            }
+            (*commands)[j-2] = NULL;
+            i--;
+        }
+        i++;
+    }
+    return;
+}
+
+int findConveyor(char*** commands, int number_of_commands) {
+    int number_of_processes_in_conveyor = 1;
+    if (strcmp((*commands)[0], "|")==0) {
+        return -1;
+    }
+    for (int i = 1; (*commands)[i]; i++) {
+        if (strcmp((*commands)[i], "|")==0) {
+            (*commands)[i] = NULL;
+            number_of_processes_in_conveyor++;
+        }
+    }
+    return number_of_processes_in_conveyor;
+}
+
+void executeConveyor(char*** commands, int number_of_commands, int number_of_processes_in_conveyor) {
+    int fd[2];
+    int start = 0;
+    for (int i = 0; i < number_of_processes_in_conveyor; i++) {
+        pipe(fd);
+        switch (fork()) {
+            case -1:
+                perror("Error: Ups....\n");
+                _exit(0);
+            case 0:
+                if (i != number_of_processes_in_conveyor-1) {
+                    dup2(fd[1], 1);
+                }
+                close(fd[0]);
+                close(fd[1]);
+                changeDirection(commands, number_of_commands);
+                execvp((*commands)[start], *commands+start);
+                perror("Error: Failed to make conveyor\n");
+                _exit(0);
+        }
+        dup2(fd[0], 0);
+        close(fd[1]);
+        close(fd[0]);
+        while ((*commands)[start++] != NULL);
+    }
+    while (wait(NULL) != -1);
+    _exit(0);
+}
+
+int findBackgroundProcess(char*** commands, int number_of_commands) {
+    int number_of_amps = 0;
+    int i =0;
+    while ((*commands)[i]) {
+        if (strcmp((*commands)[i], "&") == 0) {
+            free((*commands)[i]);
+            (*commands)[i] = NULL;
+            number_of_amps++;
+            int j = i+1;
+            while ((*commands)[j]) {
+                (*commands)[j-1] = (*commands)[j];
+                j ++;
+            }
+            (*commands)[j-1] = NULL;
+            i--;
+        } 
+        i++;
+    }
+    return number_of_amps;
+}
+
