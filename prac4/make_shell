@@ -1,2 +1,2 @@
 all:
-	gcc shell.c -Wall -o shell
+	gcc shell.c reading.c -Wall -o shell
