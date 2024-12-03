@@ -45,7 +45,7 @@ int main(int argc, char** argv) {
                 lseek(fd, (son_mum*(k+1) + j)*NUMBER_SIZE + son_mum*sizeof(char), SEEK_SET);
                 double cur = cos((x0+j*s)*(son_mum+1)/p*M_PI);
                 char* str = malloc(NUMBER_SIZE);
-                sprintf(str, "%.10g", cur);
+                sprintf(str, "%20.10g", cur);
                 write(fd, str, strlen(str));
                 if (j == k) {
                     char el = '\n';
