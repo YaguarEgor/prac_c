@@ -36,9 +36,12 @@ int executeCommands(char*** commands, int* number_of_commands) {
             printf("\nProcess %d exited with code %d\n", pid_bcg, WEXITSTATUS(status));
         }
         else {
-            printf("\nProcess %d aborted by signal %d\n", pid_bcg, WEXITSTATUS(status));
+            printf("\nProcess %d aborted by signal %d\n", pid_bcg, WTERMSIG(status));
         }
     }
+    if (!(*commands)[0]) {
+		return -1;
+	}
     
     (*commands) = (char**)realloc((*commands), (*number_of_commands+1)*sizeof(char*));
     (*commands)[*number_of_commands] = (char*)0;
@@ -75,7 +78,7 @@ int executeCommands(char*** commands, int* number_of_commands) {
                 close(fd);
             }
             if (number_of_processes_in_conveyor == 1) {
-                changeDirection(commands, *number_of_commands);
+                changeDirection(commands, *number_of_commands, 0);
                 execvp((*commands)[0], *commands);
             }
             else if (number_of_processes_in_conveyor > 1) {
@@ -104,14 +107,15 @@ void freeMemory(char** mas_words, int len) {
     free(mas_words);
 }
 
-void changeDirection(char*** commands, int number_of_commands) {
+void changeDirection(char*** commands, int number_of_commands, int offset) {
     int i = 0;
+    char** cur_command = *commands+offset;
     while (i < number_of_commands-1) {
-        if (!(*commands)[i]) {
+        if (!cur_command[i]) {
             break;
         }
-        if (strcmp((*commands)[i], "<") == 0) {
-            int fd_in = open((*commands)[i+1], O_RDONLY);
+        if (strcmp(cur_command[i], "<") == 0) {
+            int fd_in = open(cur_command[i+1], O_RDONLY);
             if (fd_in != -1) {
                 dup2(fd_in, 0);
                 close(fd_in);
@@ -120,15 +124,15 @@ void changeDirection(char*** commands, int number_of_commands) {
                 fprintf(stderr, "Error with changing input stream\n");
             }
             int j = i+2;
-            while ((*commands)[j]) {
-                (*commands)[j-2] = (*commands)[j];
+            while (cur_command[j]) {
+                cur_command[j-2] = cur_command[j];
                 j ++;
             }
-            (*commands)[j-2] = NULL;
+            cur_command[j-2] = NULL;
             i--;
         }
-        if (strcmp((*commands)[i], ">") == 0) {
-            int fd_out = open((*commands)[i+1], O_WRONLY | O_CREAT | O_TRUNC, 0777);
+        if (strcmp(cur_command[i], ">") == 0) {
+            int fd_out = open(cur_command[i+1], O_WRONLY | O_CREAT | O_TRUNC, 0777);
             if (fd_out != -1) {
                 dup2(fd_out, 1);
                 close(fd_out);
@@ -137,15 +141,15 @@ void changeDirection(char*** commands, int number_of_commands) {
                 fprintf(stderr, "Error with changing error stream\n");
             }
             int j = i+2;
-            while ((*commands)[j]) {
-                (*commands)[j-2] = (*commands)[j];
+            while (cur_command[j]) {
+                cur_command[j-2] = cur_command[j];
                 j ++;
             }
-            (*commands)[j-2] = NULL;
+            cur_command[j-2] = NULL;
             i--;
         }
-        if (strcmp((*commands)[i], ">>") == 0) {
-            int fd_out = open((*commands)[i+1], O_RDWR | O_APPEND | O_CREAT, 0777);
+        if (strcmp(cur_command[i], ">>") == 0) {
+            int fd_out = open(cur_command[i+1], O_RDWR | O_APPEND | O_CREAT, 0777);
             if (fd_out != -1) {
                 dup2(fd_out, 1);
                 close(fd_out);
@@ -154,11 +158,11 @@ void changeDirection(char*** commands, int number_of_commands) {
                 fprintf(stderr, "Error with changing error stream\n");
             }
             int j = i+2;
-            while ((*commands)[j]) {
-                (*commands)[j-2] = (*commands)[j];
+            while (cur_command[j]) {
+                cur_command[j-2] = cur_command[j];
                 j ++;
             }
-            (*commands)[j-2] = NULL;
+            cur_command[j-2] = NULL;
             i--;
         }
         i++;
@@ -195,7 +199,7 @@ void executeConveyor(char*** commands, int number_of_commands, int number_of_pro
                 }
                 close(fd[0]);
                 close(fd[1]);
-                changeDirection(commands, number_of_commands);
+                changeDirection(commands, number_of_commands-start, start);
                 execvp((*commands)[start], *commands+start);
                 perror("Error: Failed to make conveyor\n");
                 _exit(0);
@@ -229,4 +233,3 @@ int findBackgroundProcess(char*** commands, int number_of_commands) {
     }
     return number_of_amps;
 }
-

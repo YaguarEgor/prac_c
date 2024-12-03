@@ -19,7 +19,7 @@
     int getWordsFromLine(FILE* inp, char*** mas_of_words, int* number_of_words, int* code);
     void getAllCommands(FILE* inp, char*** mas_of_words, int* number_of_words);
     int executeCommands(char*** commands, int* number_of_commands);
-    void changeDirection(char*** commands, int number_of_commands);
+    void changeDirection(char*** commands, int number_of_commands, int offset);
     int findConveyor(char*** commands, int number_of_commands);
     void executeConveyor(char*** commands, int number_of_commands, int number_of_processes_in_conveyor);
     int findBackgroundProcess(char*** commands, int number_of_commands);
