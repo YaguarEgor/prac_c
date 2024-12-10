@@ -28,7 +28,23 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-int executeCommands(char*** commands, int* number_of_commands) {
+void getRidOfBrackets(char*** commands, int* number_of_commands, int offset) {
+    free((*commands)[offset]);
+    int j = 1+offset;
+    while ((*commands)[j]) {
+        (*commands)[j-1] = (*commands)[j];
+        j ++;
+    }
+    (*commands)[j-1] = NULL;
+    if (strcmp((*commands)[j-2], ")")==0) {
+        free((*commands)[j-2]);
+        (*commands)[j-2] = NULL;
+    }
+    prepare_for_execution(*commands+offset, *number_of_commands-2);
+}
+
+void prepare_for_execution(char** commands_line, int number_of_words) {
+    //ловим завершение фонового процесса
     pid_t pid_bcg;
     int status;
     if ((pid_bcg = waitpid(0, &status, WNOHANG)) > 0) {
@@ -39,10 +55,61 @@ int executeCommands(char*** commands, int* number_of_commands) {
             printf("\nProcess %d aborted by signal %d\n", pid_bcg, WTERMSIG(status));
         }
     }
-    if (!(*commands)[0]) {
-		return -1;
+
+    //проверка на пустую строку
+    if (!(commands_line)[0]) {
+		return;
 	}
-    
+
+    //делим введенную строку на отдельные команды, если есть разделители ; && ||
+    char*** commands = calloc(number_of_words,sizeof(char**));
+    char** separators = calloc(number_of_words,sizeof(char*));
+    int* number_of_commands_cur = calloc(number_of_words, sizeof(int));
+    int number_of_commands = 0, number_of_separators = 0, num_of_opened_brackets = 0, status_of_finished_process;
+    for (int i = 0; i<number_of_words && commands_line[i]; i++) {
+        commands[i] = calloc(number_of_words, sizeof(char*));
+        if (strcmp(commands_line[i], "(")==0) {
+            num_of_opened_brackets++;
+        }
+        if (strcmp(commands_line[i], ")")==0) {
+            num_of_opened_brackets--;
+        }
+        if ((strcmp(commands_line[i], "||")==0 || strcmp(commands_line[i], "&&")==0 || strcmp(commands_line[i], ";")==0) && i && !num_of_opened_brackets) {
+            separators[number_of_separators++] = commands_line[i];
+            number_of_commands++;
+        }
+        else {
+            commands[number_of_commands][number_of_commands_cur[number_of_commands]++] = commands_line[i];
+        }
+    }
+    number_of_commands++;
+    //запускаем все найденные команды в нужном порядке, учитывая разделители
+    for (int i = 0; i < number_of_commands; i++) {
+        status_of_finished_process = executeCommands(&(commands[i]), &(number_of_commands_cur[i]));
+        if (i == number_of_commands-1) {
+            continue;
+        }
+        if (WIFEXITED(status_of_finished_process) && !WEXITSTATUS(status_of_finished_process) && !strcmp(separators[i], "||")) { //success
+            while (i < number_of_separators && strcmp(separators[i++], ";"));
+        }
+        else if ((!WIFEXITED(status_of_finished_process) || WEXITSTATUS(status_of_finished_process)) && !strcmp(separators[i], "&&")) {
+            while (i < number_of_separators && strcmp(separators[i++], ";"));
+        }
+    }
+    free(number_of_commands_cur);
+    free(separators);
+    for (int i = 0; i < number_of_words; i++) {
+        free(commands[i]);
+    }
+    free(commands);
+}
+
+
+int executeCommands(char*** commands, int* number_of_commands) {
+    if (!(*commands)[0]) {
+		return 1;
+	}
+
     (*commands) = (char**)realloc((*commands), (*number_of_commands+1)*sizeof(char*));
     (*commands)[*number_of_commands] = (char*)0;
     if (strcmp((*commands)[0], "cd") == 0) {
@@ -56,7 +123,6 @@ int executeCommands(char*** commands, int* number_of_commands) {
             }
         }
     }
-
     else {
         int is_bcg_process = findBackgroundProcess(commands, *number_of_commands);
         if (is_bcg_process > 1) {
@@ -79,22 +145,27 @@ int executeCommands(char*** commands, int* number_of_commands) {
             }
             if (number_of_processes_in_conveyor == 1) {
                 changeDirection(commands, *number_of_commands, 0);
-                execvp((*commands)[0], *commands);
+                if (strcmp((*commands)[0], "(") == 0) {
+                    getRidOfBrackets(commands, number_of_commands, 0);
+                    while (wait(NULL)!=-1);
+                    exit(0);
+                }
+                else {
+                    execvp((*commands)[0], *commands);
+                }
+                
+
             }
             else if (number_of_processes_in_conveyor > 1) {
                 executeConveyor(commands, *number_of_commands, number_of_processes_in_conveyor);
             }   
-            perror("Error: Failed to find such command(2)\n");
-            _exit(0); 
+            perror("Error: Failed to find such command\n");
+            exit(0); 
         }
         if (!is_bcg_process) {
             int status;
             waitpid(pid, &status, 0);
-            if (WIFEXITED(status)) {
-                return WEXITSTATUS(status);
-            } else {
-                return 1;
-            }
+            return status;
         }
     }
     return 0;
@@ -200,7 +271,15 @@ void executeConveyor(char*** commands, int number_of_commands, int number_of_pro
                 close(fd[0]);
                 close(fd[1]);
                 changeDirection(commands, number_of_commands-start, start);
-                execvp((*commands)[start], *commands+start);
+                if (strcmp((*commands)[start], "(") == 0) {
+                    int temp = number_of_commands-start;
+                    getRidOfBrackets(commands, &temp, start);
+                    while (wait(NULL)!=-1);
+                    exit(0);
+                }
+                else {
+                    execvp((*commands)[start], *commands+start);
+                }
                 perror("Error: Failed to make conveyor\n");
                 _exit(0);
         }
@@ -218,7 +297,6 @@ int findBackgroundProcess(char*** commands, int number_of_commands) {
     int i =0;
     while ((*commands)[i]) {
         if (strcmp((*commands)[i], "&") == 0) {
-            free((*commands)[i]);
             (*commands)[i] = NULL;
             number_of_amps++;
             int j = i+1;

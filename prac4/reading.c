@@ -22,8 +22,8 @@ void getAllCommands(FILE* inp, char*** mas_of_words, int* number_of_words) {
         getcwd(path, WD_BUFFER);
         fprintf(stdout, "%s: ", path);
         (*number_of_words) = getWordsFromLine(inp, mas_of_words, number_of_words, &code);
-        executeCommands(mas_of_words, number_of_words);
-        freeMemory(*mas_of_words, *number_of_words + 1);
+        prepare_for_execution(*mas_of_words, *number_of_words);
+        freeMemory(*mas_of_words, *number_of_words);
         *mas_of_words = NULL;
         (*number_of_words) = 0;
     }

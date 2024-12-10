@@ -23,6 +23,7 @@
     int findConveyor(char*** commands, int number_of_commands);
     void executeConveyor(char*** commands, int number_of_commands, int number_of_processes_in_conveyor);
     int findBackgroundProcess(char*** commands, int number_of_commands);
+    void prepare_for_execution(char** commands_line, int number_of_words);
 
     #define WD_BUFFER 1000
     #define NL 1
