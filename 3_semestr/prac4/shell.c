@@ -90,10 +90,16 @@ void prepare_for_execution(char** commands_line, int number_of_words) {
             continue;
         }
         if (WIFEXITED(status_of_finished_process) && !WEXITSTATUS(status_of_finished_process) && !strcmp(separators[i], "||")) { //success
-            while (i < number_of_separators && strcmp(separators[i++], ";"));
+            while (i < number_of_separators && strcmp(separators[i], ";")) {
+                i++;
+                continue;
+            }
         }
         else if ((!WIFEXITED(status_of_finished_process) || WEXITSTATUS(status_of_finished_process)) && !strcmp(separators[i], "&&")) {
-            while (i < number_of_separators && strcmp(separators[i++], ";"));
+            while (i < number_of_separators && strcmp(separators[i++], ";")) {
+                i++;
+                continue;
+            }
         }
     }
     free(number_of_commands_cur);
@@ -103,7 +109,6 @@ void prepare_for_execution(char** commands_line, int number_of_words) {
     }
     free(commands);
 }
-
 
 int executeCommands(char*** commands, int* number_of_commands) {
     if (!(*commands)[0]) {

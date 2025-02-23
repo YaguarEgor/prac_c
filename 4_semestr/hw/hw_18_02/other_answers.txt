@@ -1,0 +1,25 @@
+№1.11) 
+owl
+sheep 3
+sheep 7
+wolf
+horse 42
+sheep 1
+wolf
+wolf
+42 126
+wolf
+wolf
+
+№3)
+Constr
+C_copy
+C_copy
+Destr 
+Destr
+Destr
+
+Можно передавать оба параметра по ссылке, а не по значению
+
+A b;
+A a = b;
