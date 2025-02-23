@@ -110,7 +110,6 @@ void prepare_for_execution(char** commands_line, int number_of_words) {
     free(commands);
 }
 
-
 int executeCommands(char*** commands, int* number_of_commands) {
     if (!(*commands)[0]) {
 		return 1;
