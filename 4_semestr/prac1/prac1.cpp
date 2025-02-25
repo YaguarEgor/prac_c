@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cstring>
+#include <variant>
 
 using namespace std;
 
@@ -34,6 +35,20 @@ public:
     }
     int get_published_at() const {
         return this -> published_at;
+    }
+
+    variant<string, int> get_field(int field) {
+        switch (field) {
+            case 1:
+                return this->name;
+                break;
+            case 2:
+                return this->author;
+                break;
+            case 3:
+                return this->published_at;
+                break;
+        }
     }
 };
 
@@ -160,7 +175,25 @@ public:
         books = new_books; 
     }
 
-    //sort_by
+    void sort_library(int field) {
+        if (field > 3 || field < 1) {
+            cout << "Выберите один из трех вариантов" << endl;
+        }
+        if (this->size_of_library == 0) {
+            cout << "В Вашей библиотеке пока нет книг" << endl;
+            return;
+        }
+        for (int i = 0; i < 10; i++) {
+            for (int j = 0; j < 9; j++) {
+              if (this->books[j].get_field(field) > this->books[j + 1].get_field(field)) {
+                Book b = this->books[j]; 
+                this->books[j] = this->books[j + 1];
+                this->books[j + 1] = b; 
+              }
+            }
+        }
+        get_all_books();
+    }
 
     ~HomeLibrary() {
         delete[] this->books;
