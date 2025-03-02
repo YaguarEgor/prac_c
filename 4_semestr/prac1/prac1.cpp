@@ -5,21 +5,11 @@
 using namespace std;
 
 class Book {
-    // char* name;
-    // char* author;
     string name;
     string author;
     int published_at;
 public:
     Book() {};
-
-    // Book(const char* name, const char* author, int published_at) {
-    //     this -> name = new char[strlen(name)+1];
-    //     strcpy(this->name, name);
-    //     this -> author = new char[strlen(author)+1];
-    //     strcpy(this->author, author);
-    //     this -> published_at = published_at;
-    // };
 
     Book(const string name, const string author, int published_at) {
         this -> name = name;
@@ -140,7 +130,7 @@ public:
         "0) Вывести все книги в Вашей библиотеке" << endl << " "
         "1) Добавить книгу. Вас попросят ввести название и автора книги, год публикации необязателен (по умолчанию - 2025)" << endl << " "
         "2) Поиск книги по автору. Введите автора и получите все его книги в Вашей библиотеке" << endl << " "
-        "3) Поиск книги по названию. Ввведите название и получите всн книги с таким названием" << endl << " "
+        "3) Поиск книги по названию. Введите название и получите всн книги с таким названием" << endl << " "
         "4) Поиск книги по дате публикации. Введите дату и получите все книги этого года выпуска в Вашей библиотеке" << endl << " "
         "5) Удаление книги по названию. Введите название книги, чтобы удалить ее из Вашей библиотеки" << endl << " "
         "6) Отсортировать книги по полю. Нужно будет выбрать поле для сортировки и порядок" << endl << " "
