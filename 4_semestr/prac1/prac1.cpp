@@ -20,9 +20,11 @@ public:
     string get_name() const{
         return this -> name;       
     }
+    
     string get_author() const {
         return this -> author;
     }
+    
     int get_published_at() const {
         return this -> published_at;
     }
