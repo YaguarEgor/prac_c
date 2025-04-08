@@ -12,7 +12,9 @@
 using namespace std;
 
 enum type_of_lex {
-    LEX_NULL,                                                                                   
+    LEX_NULL,  
+    
+    
 
     LEX_IF, LEX_AND, LEX_REAL, LEX_STRING, LEX_DO, LEX_GOTO, LEX_FALSE, LEX_INT,                          
     LEX_NOT, LEX_OR, LEX_PROGRAM, LEX_READ, LEX_TRUE, LEX_BREAK, LEX_WRITE, LEX_WHILE,                    
@@ -21,9 +23,9 @@ enum type_of_lex {
 
     LEX_SEMICOLON, LEX_COMMA, LEX_COLON, LEX_ASSIGN, LEX_LPAREN, LEX_RPAREN, LEX_EQ, LEX_LSS,   
     LEX_GTR, LEX_PLUS, LEX_MINUS, LEX_TIMES, LEX_SLASH, 
-    LEX_MOD,     // Новый токен для оператора '%'
+    LEX_MOD,    
     LEX_LEQ, LEX_NEQ, LEX_GEQ,    
-    LEX_LFIG, LEX_RFIG,   // Токены для фигурных скобок { и }
+    LEX_LFIG, LEX_RFIG,   
     
     LEX_NUM,                                                                                    
     LEX_STR,                                                                                    
@@ -149,16 +151,17 @@ public:
     Lex get_lex();
 };
 
-const char *Scanner::TW[] = {        
-    "",  "and", "begin", "bool", "do", "else", "end", 
-    "if", "false", "int", "not", "or", "program", "read",     
-    "then", "true", "var", "while", "write", NULL  
+const char *Scanner::TW[] = {
+    "", "if", "and", "real", "string", "do",
+    "goto","false","int","not","or","program","read",
+    "true", "break", "write", "while", NULL
 };
 
-const char *Scanner::TD[] = { 
-    "@", ";", ",", ":", ":=", "(", ")", "=",
-    "<", ">", "+", "-", "*", "/", "%", "<=", "!=", ">=", "{", "}", NULL 
-}; 
+const char *Scanner::TD[] = {
+    "", ";", ",", ":", "=", "(", ")", "==",
+    "<", ">", "+", "-", "*", "/", "%", "<=", "!=", ">=", 
+    "{", "}", NULL
+};
 
 int count = 0;
 
@@ -300,14 +303,21 @@ ostream &operator<<(ostream &s, Lex lex_to_print) {
 int Scanner::line_counter = 1;
 
 int main() {
+    int openBraceCount = 0, closeBraceCount = 0;
     try {
         Scanner S("1.txt");
         while (true) {
             Lex current_lex = S.get_lex();
             if (current_lex.get_type() == LEX_FIN)
+
                 break;
             cout << current_lex;
+            if (current_lex.get_type() == LEX_LFIG)
+                openBraceCount++;
+            else if (current_lex.get_type() == LEX_RFIG)
+                closeBraceCount++;
         }
+        
         return 0;
     }
     catch (char c) {
