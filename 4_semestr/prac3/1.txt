@@ -14,5 +14,5 @@ write(b);
 read(a);
 */
 a+1;
-write(b);
+write(b);;
 }

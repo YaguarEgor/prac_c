@@ -12,9 +12,7 @@
 using namespace std;
 
 enum type_of_lex {
-    LEX_NULL,  
-    
-    
+    LEX_NULL,      
 
     LEX_IF, LEX_AND, LEX_REAL, LEX_STRING, LEX_DO, LEX_GOTO, LEX_FALSE, LEX_INT,                          
     LEX_NOT, LEX_OR, LEX_PROGRAM, LEX_READ, LEX_TRUE, LEX_BREAK, LEX_WRITE, LEX_WHILE,                    
@@ -232,6 +230,8 @@ Lex Scanner::get_lex() {
             case NUMB:
                 if (isdigit(c)) {
                     d = d * 10 + (c - '0');
+                } else if (isalpha(c)) {
+                    throw("wrong identificator");
                 } else {
                     ungetc(c, fp);
                     return Lex(LEX_NUM, d, line_counter);
@@ -240,7 +240,7 @@ Lex Scanner::get_lex() {
 
             case COM:
                 if (c == EOF)
-                    throw c;
+                    throw "no }";
                 else if (c == '\n')
                     line_counter++;
                 else if (c == '*') {
@@ -274,7 +274,7 @@ Lex Scanner::get_lex() {
                     return Lex(LEX_STR, ::count, line_counter, buf);
                 }
                 break;
-        } // end switch
+        } 
     }
 }
 
@@ -305,7 +305,7 @@ int Scanner::line_counter = 1;
 int main() {
     int openBraceCount = 0, closeBraceCount = 0;
     try {
-        Scanner S("1.txt");
+        Scanner S("2.txt");
         while (true) {
             Lex current_lex = S.get_lex();
             if (current_lex.get_type() == LEX_FIN)
@@ -321,15 +321,15 @@ int main() {
         return 0;
     }
     catch (char c) {
-        cout << "unexpected symbol " << c << endl;
+        cout << "Line " << Scanner::line_counter << ": unexpected symbol " << c << endl;
         return 1;
     }
     catch (Lex l) {
-        cout << "unexpected lexeme" << l << endl;
+        cout << "Line " << Scanner::line_counter << "unexpected lexeme" << l << endl;
         return 1;
     }
     catch (const char *source) {
-        cout << source << endl;
+        cout << "Line " << Scanner::line_counter << source << endl;
         return 1;
     }
 }
