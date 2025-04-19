@@ -1,15 +1,18 @@
 program
 {
+{} while;
 int a=51, b=6, c;
 m: a=b=c=2;
 goto m;
-/*c=a+(b=1);
+c=a+(b=1);
+/*
 do {
-a=a+1;
+a=a+1; 
 } while (a != 55);
 write(a);
 write(b);
-read(a);*/
+read(a);
+*/
 a+1;
-write(b);
+write(b);;
 }
