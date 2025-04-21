@@ -1,10 +1,11 @@
 program
 {
-{} while;
 int a=51, b=6, c;
+real h = 1.5, k = 2.1;
 m: a=b=c=2;
 goto m;
 c=a+(b=1);
+h = h +k;
 /*
 do {
 a=a+1; 
@@ -12,7 +13,7 @@ a=a+1;
 write(a);
 write(b);
 read(a);
-*/
+
 a+1;
-write(b);;
+write(b);; */
 }
