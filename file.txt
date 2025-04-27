@@ -1,24 +1,18 @@
 program {
     int a = 51, b = 6, c;
-    bool abc = true;
-    string x = "abc", z = "abcd", y;
+    string x = "abc", y, z = "abcd";
     c = (a + b) * 2;
     if (c >= 100 or x == z) {
         read (y);
         write (y);
         write (x + y + z, c);
-    } else {
-        write(6);
     }
-    
     while (abc) {
         c = c - 5;
         write (c);
         x = x + "step";
-        break;
     }
-    1+2;
-    
+    break;
     write (x);
 
     {/* this is a comment */ }
