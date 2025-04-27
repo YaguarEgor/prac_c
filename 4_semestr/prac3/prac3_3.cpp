@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <ostream>
 #include <stack>
+#include <iomanip>
 
 
 using namespace std;
@@ -60,6 +61,10 @@ public:
 
     double get_dval() const {
         return d_val;
+    }
+
+    const string& get_slex() const {
+        return s_lex;
     }
 
     friend ostream &operator<<(ostream &s, Lex l );
@@ -320,6 +325,9 @@ class Parser {
         int                c_val;              // значение/индекс текущей лексемы
         stack<int>         st_int;             // стек целочисленных значений (не используется здесь)
         stack<type_of_lex> st_lex;             // стек типов при проверке выражений
+        Lex  hold_lex;                         // отложенная лексема
+        bool hold_flag = false;                // есть ли отложенная лексема
+        int loop_depth = 0;                    // для break
     
         void gl();                              // считать следующую лексему
         void P();                               // запуск анализа программы
@@ -337,8 +345,12 @@ class Parser {
         void check_id();                        // проверка объявления идентификатора
         void check_id_in_read();                // проверка идентификатора для read
         void check_label();
+        void put_back(const Lex &l);             // вернуть лексему в поток
+        bool is_expr_start(type_of_lex t);
+        
     
     public:
+        vector<Lex> poliz; 
         explicit Parser(const char *program);   // конструктор, принимает имя файла
         void analyze();                         // точка входа синтаксического анализа
     };
@@ -350,12 +362,28 @@ class Parser {
       : scan(program) {
         gl();
     }
+
+    bool Parser::is_expr_start(type_of_lex t) {
+        return t == LEX_ID  || t == LEX_NUM  || t == LEX_REAL_CONST ||
+               t == LEX_STR || t == LEX_TRUE || t == LEX_FALSE      ||
+               t == LEX_LPAREN || t == LEX_NOT;
+    }
     
     // gl(): загрузить следующую лексему из Scanner
     void Parser::gl() {
-        curr_lex = scan.get_lex();
-        c_type   = curr_lex.get_type();
-        c_val    = curr_lex.get_value();
+        if (hold_flag) {                 // читаем из буфера
+            curr_lex  = hold_lex;
+            hold_flag = false;
+        } else {                         // читаем «как раньше»
+            curr_lex = scan.get_lex();
+        }
+        c_type = curr_lex.get_type();
+        c_val  = curr_lex.get_value();
+    }
+
+    void Parser::put_back(const Lex &l) {    
+        hold_lex  = l;
+        hold_flag = true;
     }
     
     // analyze(): общий поток синтаксического анализа
@@ -387,6 +415,58 @@ class Parser {
         // Конец файла
         if (c_type != LEX_FIN) throw curr_lex;
         cout << "Yes!!!" << endl;
+            // красивый вывод ПОЛИЗа
+        cout << "\n--- POLIZ (size=" << poliz.size() << ") ---\n";
+        for (size_t i = 0; i < poliz.size(); ++i) {
+            cout << setw(4) << i << ": ";
+            const Lex &lx = poliz[i];
+            switch (lx.get_type()) {
+                case POLIZ_LABEL:
+                    cout << "LABEL " << lx.get_value();
+                    break;
+                case POLIZ_ADDRESS: {
+                    int id = lx.get_value();
+                    cout << "ADDR " << id 
+                        << " (" << TID[id].get_name() << ")";
+                    break;
+                }
+                case POLIZ_GO:
+                    cout << "GO";
+                    break;
+                case POLIZ_FGO:
+                    cout << "FGO";
+                    break;
+                case LEX_ID:
+                    // выводим имя переменной
+                    cout << TID[lx.get_value()].get_name();
+                    break;
+                case LEX_NUM:
+                    // целочисленная константа
+                    cout << lx.get_value();
+                    break;
+                case LEX_REAL_CONST:
+                    // вещественная константа
+                    cout << lx.get_dval();
+                    break;
+                case LEX_STR:
+                    // строковая константа в кавычках
+                    cout << '"' << lx.get_slex() << '"';
+                    break;
+                case LEX_TRUE:
+                case LEX_FALSE:
+                    // булева константа
+                    cout << Scanner::TW[lx.get_type()];
+                    break;
+                default:
+                    // все остальные символы (операторы, скобки и т.п.)
+                    if (lx.get_type() < LEX_FIN)
+                        cout << Scanner::TW[lx.get_type()];
+                    else
+                        cout << Scanner::TD[lx.get_type() - LEX_FIN];
+                    break;
+            }
+            cout << '\n';
+        }
     }
     
     // D(type): раздел объявлений переменных
@@ -400,12 +480,15 @@ class Parser {
     
             gl(); // съесть идентификатор
             if (c_type == LEX_ASSIGN) {
+                poliz.push_back(Lex(POLIZ_ADDRESS, id));
                 gl(); // съесть '='
                 E();  // разобрать выражение-инициализатор
     
                 // проверить, что тип инициализатора совпадает с объявленным
                 if (st_lex.top() != t) throw "initializer type mismatch";
                 st_lex.pop();
+                
+                poliz.push_back(Lex(LEX_ASSIGN));
             }
         } while (c_type == LEX_COMMA && (gl(), true));
     }
@@ -414,16 +497,33 @@ class Parser {
     void Parser::S() {
         if (c_type == LEX_IF) {
             gl(); E(); eq_bool();
+            int pl2 = poliz.size();  
+            poliz.push_back(Lex(POLIZ_LABEL, 0));
+            poliz.push_back(Lex(POLIZ_FGO));
             S();
+            int pl3 = poliz.size();
+            poliz.push_back(Lex(POLIZ_LABEL, 0));
+            poliz.push_back(Lex(POLIZ_GO));
+            poliz[pl2] = Lex(POLIZ_LABEL, poliz.size());
             if (c_type == LEX_ELSE) { gl(); S(); }
+            poliz[pl3] = Lex(POLIZ_LABEL, poliz.size());
         }
         else if (c_type == LEX_WHILE) {
             gl();             // съели 'while'
+            ++loop_depth;                // вошли в цикл
+            int pl0 = poliz.size();
             E(); eq_bool();   // условие
-            // если есть 'do', то съём его (необязательно в примере)
+            // если есть 'do', то съём его
+            int pl1 = poliz.size();
+            poliz.push_back(Lex(POLIZ_LABEL, 0));
+            poliz.push_back(Lex(POLIZ_FGO)); 
             if (c_type == LEX_DO) gl();
             // дальше S() разберёт либо одиночный stmt, либо блок {...}
             S();
+            poliz.push_back(Lex(POLIZ_LABEL, pl0));  // jump-back target
+            poliz.push_back(Lex(POLIZ_GO));          // unconditional
+            poliz[pl1] = Lex(POLIZ_LABEL, poliz.size());
+            --loop_depth;  
         }
         else if (c_type == LEX_READ) {
             gl();              // 'read'
@@ -431,9 +531,11 @@ class Parser {
             gl();              // '('
             if (c_type != LEX_ID) throw curr_lex;
             check_id_in_read();
+            poliz.push_back(Lex(POLIZ_ADDRESS, c_val)); 
             gl();              // ID
             if (c_type != LEX_RPAREN) throw curr_lex;
             gl();              // ')'
+            poliz.push_back(Lex(LEX_READ));
         }
         else if (c_type == LEX_WRITE) {
             gl();              // 'write'
@@ -445,6 +547,7 @@ class Parser {
             } while (c_type == LEX_COMMA && (gl(), true));
             if (c_type != LEX_RPAREN) throw curr_lex;
             gl();              // ')'
+            poliz.push_back(Lex(LEX_WRITE));    
         }
         else if (c_type == LEX_LFIG) {
             // блок { S; S; … }
@@ -457,32 +560,33 @@ class Parser {
             gl();     // съели '}'
         }
         else if (c_type == LEX_ID) {
-            // Проверяем, является ли это меткой (ID : )
-            Lex saved_lex = curr_lex; // Сохраняем текущую лексему
-            int id = c_val;
-            gl(); // Съели ID
-            if (c_type == LEX_COLON) {
-                // Это метка
-                TID[id].put_is_label(); // Отмечаем как метку
-                gl(); // Съели ':'
-                // После метки может следовать оператор
-                if (c_type != LEX_RFIG && c_type != LEX_SEMICOLON) {
-                    S(); // Разбираем следующий оператор
-                }
-            } else {
-                // Это не метка, а присваивание
-                int id2 = c_val;
-                c_val = id;
-                check_id(); // Проверяем, что ID объявлен
-                c_val = id2;
-                if (c_type != LEX_ASSIGN) throw curr_lex;
-                do {
-                    gl();  // съели '='
-                    E();   // RHS
-                    eq_type();
-                    
-                } while (c_type == LEX_ASSIGN);
+            Lex first = curr_lex;                    // запомнили ID
+            gl();                                    // заглянули вперёд
+            if (c_type == LEX_COLON) {               // =====  метка  id:
+                TID[first.get_value()].put_is_label();
+                gl();                                // съели ':'
+                S();                                 // оператор после метки
+            } else {                                 // =====  не метка  →  выражение
+                put_back(curr_lex);                  // вернули look‑ahead
+                curr_lex = first;                    // восстановили ID
+                c_type   = first.get_type();
+                c_val    = first.get_value();
+
+                E();                                 // разбираем выражение, начиная с ID
+                st_lex.pop();                        // тип результата выражения больше не нужен
             }
+        }
+        else if (is_expr_start(c_type)) {            // 1+3;  (a+b)*c;  "hi"+s;
+            E();
+            st_lex.pop();
+        }
+        else if (c_type == LEX_BREAK) {    // <— новый кейс для break
+            if (loop_depth == 0)
+                throw "break outside loop";       // вне циклов нельзя
+            /* если break допустим, просто читаем и кладём метку,
+            которая при интерпретации будет «перепрыгивать» дальше */
+            poliz.push_back(Lex(POLIZ_GO));       // (простейшая реализация)
+            gl();                        // просто «съедаем» break
         }
         else if (c_type == LEX_GOTO) {
             gl(); // Съели 'goto'
@@ -545,45 +649,65 @@ class Parser {
         }
     }
     
-    // F: атомарное выражение
+    //F: атомарное выражение
     void Parser::F() {
         if (c_type == LEX_ID) {
-            Lex saved_lex = curr_lex;
-            int id = c_val;
-            gl();
+            /* 1. запоминаем лексему и её id */
+            Lex id_lex = curr_lex;
+            int id     = c_val;
+            
+            /* 2. проверяем, объявлена ли переменная — тип нужен в любом
+                  случае (LHS тоже должен быть проверен) */
+            check_id();               // пушит тип в st_lex
+            
+            /* 3. заглядываем на следующий токен */
+            gl();                     // прочитали look-ahead
+            
             if (c_type == LEX_ASSIGN) {
-                c_val = id;
-                // Присваивание как выражение, например, b=1
-                check_id(); // Проверяем, что ID объявлен
-                gl(); // Съели '='
-                E(); // Разбираем правую часть
-                eq_type(); // Проверяем типы, оставляем тип левой части на стеке
-            } else {
-                // Обычный идентификатор
-                c_val = id;
-                check_id(); // Проверяем, что ID объявлен
+                /* ----- вариант „присваивание“  lhs := rhs ----- */
+                poliz.push_back(Lex(POLIZ_ADDRESS, id));   // адрес lhs
+                gl();                                      // съели '='
+                E();                                       // rhs
+                eq_type();                                 // типы lhs / rhs
+                poliz.push_back(Lex(LEX_ASSIGN));          // сам ":="
+            }
+            else {
+                /* ----- обычное использование переменной ----- */
+                poliz.push_back(id_lex);                   // кладём ID
+            
+                /* возвращаем look-ahead во входной поток */
+                put_back(curr_lex);
+                curr_lex = id_lex;       // восстановили текущий токен
+                c_type   = id_lex.get_type();
+                c_val    = id_lex.get_value();
+            
+                gl();                    // идём дальше
             }
         }
         else if (c_type == LEX_NUM) {
             st_lex.push(LEX_INT);
+            poliz.push_back(curr_lex);  // целая константа
+            gl();
+        }
+        else if (c_type == LEX_REAL_CONST) {
+            st_lex.push(LEX_REAL);
+            poliz.push_back(curr_lex);  // вещественная константа
             gl();
         }
         else if (c_type == LEX_STR) {
             st_lex.push(LEX_STRING);
+            poliz.push_back(curr_lex);  // строковая константа
             gl();
         }
         else if (c_type == LEX_TRUE || c_type == LEX_FALSE) {
             st_lex.push(LEX_BOOL);
+            poliz.push_back(curr_lex);  // булева константа
             gl();
-        }
-        else if (c_type == LEX_REAL_CONST) { 
-            st_lex.push(LEX_REAL);  
-            gl(); 
         }
         else if (c_type == LEX_NOT) {
             gl();
             F();
-            check_not();
+            check_not();  // сам «not» пушится внутри check_not()
         }
         else if (c_type == LEX_LPAREN) {
             gl();
@@ -595,6 +719,7 @@ class Parser {
             throw curr_lex;
         }
     }
+    
     
     // Проверка идентификатора при операции и read
     void Parser::check_id() {
@@ -618,21 +743,31 @@ class Parser {
         if ((op==LEX_PLUS||op==LEX_MINUS||op==LEX_TIMES||op==LEX_SLASH)
             &&t1==LEX_INT&&t2==LEX_INT) {
             st_lex.push(LEX_INT);
+            poliz.push_back(Lex(op));
         }
         else if ((op==LEX_PLUS||op==LEX_MINUS||op==LEX_TIMES||op==LEX_SLASH)
             &&t1==LEX_REAL&&t2==LEX_REAL) {
             st_lex.push(LEX_REAL);
+            poliz.push_back(Lex(op));
         }
         else if ((op==LEX_LSS||op==LEX_GTR||op==LEX_LEQ||op==LEX_GEQ)
                  &&t1==LEX_INT&&t2==LEX_INT) {
             st_lex.push(LEX_BOOL);
+            poliz.push_back(Lex(op));
         }
         else if ((op==LEX_AND||op==LEX_OR)
                  &&t1==LEX_BOOL&&t2==LEX_BOOL) {
             st_lex.push(LEX_BOOL);
+            poliz.push_back(Lex(op));
         }
-        else if ((op==LEX_EQ||op==LEX_NEQ)&&t1==t2) st_lex.push(LEX_BOOL);
-        else if (op==LEX_PLUS&&t1==LEX_STRING&&t2==LEX_STRING) st_lex.push(LEX_STRING);
+        else if ((op==LEX_EQ||op==LEX_NEQ)&&t1==t2) {
+            st_lex.push(LEX_BOOL);
+            poliz.push_back(Lex(op)); 
+        }
+        else if (op==LEX_PLUS&&t1==LEX_STRING&&t2==LEX_STRING) {
+            st_lex.push(LEX_STRING);
+            poliz.push_back(Lex(op)); 
+        }
         else throw "type mismatch in operation";
     }
     
@@ -640,6 +775,7 @@ class Parser {
     void Parser::check_not() {
         if (st_lex.top()!=LEX_BOOL) throw "not applied to non-bool";
         st_lex.pop(); st_lex.push(LEX_BOOL);
+        poliz.push_back(Lex(LEX_NOT));
     }
     
     // проверка присваивания по типу

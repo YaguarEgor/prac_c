@@ -1,0 +1,33 @@
+analyze   → 'program' '{' ( D ';' )* ( S ';'? )* '}'  LEX_FIN
+
+D         → TYPE IDENT_DECL  ( ',' IDENT_DECL )*
+IDENT_DECL→ IDENT ( '=' E )?                        
+
+TYPE      → 'int' | 'bool' | 'real' | 'string'
+
+S         → 'if' E S ( 'else' S )?
+          | 'while' E ( 'do' )? S
+          | 'read'  '(' IDENT ')'
+          | 'write' '(' E (',' E)* ')'
+          | '{' ( S ';'? )* '}'
+          | IDENT ':' S?                 /* метка            */
+          | IDENT '=' E ( '=' E )*       /* присваивание(+)* */
+          | 'goto' IDENT
+          | E
+
+E         → P ( 'or' P )*
+
+P         → E1 ( REL_OP E1 )?            /* сравнения        */
+REL_OP    → '==' | '!=' | '<' | '>' | '<=' | '>='
+
+E1        → T ( ('+' | '-') T )*
+
+T         → F ( ('*' | '/' | 'and') F )*
+
+F         → IDENT ( '=' E )?             /* a  |  a = b + 1  */
+          | NUM
+          | REAL_CONST
+          | STR_CONST
+          | 'true' | 'false'
+          | 'not' F
+          | '(' E ')'

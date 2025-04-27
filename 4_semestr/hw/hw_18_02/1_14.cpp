@@ -5,9 +5,9 @@ struct smartstr {
     smartstr(int b) {
         a = b;
     }
-    // private:
+private:
     //     smartstr() {};
-    //     void* operator new[](size_t);
+    void* operator new[](size_t);
 };
 
 int main() {
