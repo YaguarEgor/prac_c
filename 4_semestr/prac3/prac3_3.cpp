@@ -10,6 +10,7 @@
 #include <ostream>
 #include <stack>
 #include <iomanip>
+#include <unordered_map>
 
 
 using namespace std;
@@ -351,6 +352,8 @@ class Parser {
     
     public:
         vector<Lex> poliz; 
+        unordered_map<int,int>    label_positions; 
+        vector<pair<int,int>>     unresolved_gotos; // список незакрытых goto: пара<позиция_в_poliz, id_метки>
         explicit Parser(const char *program);   // конструктор, принимает имя файла
         void analyze();                         // точка входа синтаксического анализа
     };
@@ -414,6 +417,15 @@ class Parser {
     
         // Конец файла
         if (c_type != LEX_FIN) throw curr_lex;
+               // Перед выводом POLIZ-а — бэчпатч всех forward-goto
+        for (auto &p : unresolved_gotos) {
+            int pos = p.first, id = p.second;
+            auto it = label_positions.find(id);
+            if (it == label_positions.end())
+                throw "undefined label for goto";
+            // заменяем placeholder-позицию на реальную
+            poliz[pos] = Lex(POLIZ_LABEL, it->second);
+        }
         cout << "Yes!!!" << endl;
             // красивый вывод ПОЛИЗа
         cout << "\n--- POLIZ (size=" << poliz.size() << ") ---\n";
@@ -489,6 +501,7 @@ class Parser {
                 st_lex.pop();
                 
                 poliz.push_back(Lex(LEX_ASSIGN));
+                TID[id].put_assign();
             }
         } while (c_type == LEX_COMMA && (gl(), true));
     }
@@ -561,11 +574,17 @@ class Parser {
         }
         else if (c_type == LEX_ID) {
             Lex first = curr_lex;                    // запомнили ID
+            int id = first.get_value();
             gl();                                    // заглянули вперёд
             if (c_type == LEX_COLON) {               // =====  метка  id:
-                TID[first.get_value()].put_is_label();
-                gl();                                // съели ':'
-                S();                                 // оператор после метки
+                // 1) Помечаем в TID как метку
+                TID[id].put_is_label();
+                // 2) Запоминаем позицию этой метки в poliz и вставляем её туда:
+                int pos = poliz.size();
+                label_positions[id] = pos;
+                poliz.push_back(Lex(POLIZ_LABEL, pos));
+                gl();  // съели ':'
+                S();   // дальше оператор после метки                                // оператор после метки
             } else {                                 // =====  не метка  →  выражение
                 put_back(curr_lex);                  // вернули look‑ahead
                 curr_lex = first;                    // восстановили ID
@@ -589,13 +608,18 @@ class Parser {
             gl();                        // просто «съедаем» break
         }
         else if (c_type == LEX_GOTO) {
-            gl(); // Съели 'goto'
+            gl();  // 'goto'
             if (c_type != LEX_ID) throw curr_lex;
-            check_label(); // Проверяем, что это метка
-            gl(); // Съели ID
-            // После goto label ожидается ;
+            int id = c_val;
+            gl();  // ID
             if (c_type != LEX_SEMICOLON) throw curr_lex;
-            // Не съедаем ; здесь, так как это сделает вызывающий код
+            // 1) В poliz вставляем placeholder-метку и GO
+            int pos = poliz.size();
+            poliz.push_back(Lex(POLIZ_LABEL, 0));  // сюда позже подставим правильную позицию
+            poliz.push_back(Lex(POLIZ_GO));
+            // 2) Запомним этот goto для последующего бэчпатча
+            unresolved_gotos.emplace_back(pos, id);
+            // ';' скушает внешний код
         }
         else {
             throw curr_lex;
@@ -670,6 +694,7 @@ class Parser {
                 E();                                       // rhs
                 eq_type();                                 // типы lhs / rhs
                 poliz.push_back(Lex(LEX_ASSIGN));          // сам ":="
+                TID[id].put_assign();
             }
             else {
                 /* ----- обычное использование переменной ----- */
@@ -680,6 +705,11 @@ class Parser {
                 curr_lex = id_lex;       // восстановили текущий токен
                 c_type   = id_lex.get_type();
                 c_val    = id_lex.get_value();
+
+                if (!TID[id].get_declare())
+                    throw "identifier not declared";
+                if (!TID[id].get_assign())                
+                    throw "variable used before assignment";
             
                 gl();                    // идём дальше
             }

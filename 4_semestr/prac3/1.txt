@@ -1,8 +1,10 @@
 program {
-    int a = 51, b = 6, c;
-    bool abc = true;
-    string x = "abc", z = "abcd", y;
+    int a = 51, b, c;
+    bool abc = true, g = true;
+    string x = "abc", z = "abcd", y = "h";
     c = (a + b) * 2;
+    a = c = b;
+    2;
     if (c >= 100 or x == z) {
         read (y);
         write (y);
@@ -10,6 +12,8 @@ program {
     } else {
         write(6);
     }
+
+    
     
     while (abc) {
         c = c - 5;
@@ -17,8 +21,11 @@ program {
         x = x + "step";
         break;
     }
+
+    goto m;
     1+2;
-    
+
+    m:
     write (x);
 
     {/* this is a comment */ }
