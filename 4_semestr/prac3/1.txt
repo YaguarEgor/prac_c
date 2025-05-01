@@ -1,32 +1,31 @@
 program {
-    int a = 51, b, c;
-    bool abc = true, g = true;
-    string x = "abc", z = "abcd", y = "h";
-    c = (a + b) * 2;
-    a = c = b;
-    2;
-    if (c >= 100 or x == z) {
-        read (y);
-        write (y);
-        write (x + y + z, c);
+    int d = 20, e = 5, f;
+    bool flag = true;
+    string p = "foo", q = "bar", r = "foo";
+    
+
+    f = (d - e) * 3;
+    e = f = 45;
+    
+    0;  
+    if (f < 50 or p == r) {
+        write(f);                   /* ожидаем «45» */
+        write(p + r + q, f + e);    /* ожидаем «foobar45 90» */
     } else {
-        write(6);
+        write(100);
     }
 
-    
-    
-    while (abc) {
-        c = c - 5;
-        write (c);
-        x = x + "step";
-        break;
+    while (flag) {
+        f = f - 10;          
+        write(f);            /* ожидаем «35» */
+        flag = false;        
     }
 
-    goto m;
-    1+2;
+    goto L;
+    write(123);              
 
-    m:
-    write (x);
+    L:
+    write(p + "_end");       
 
-    {/* this is a comment */ }
+    /* здесь комментарий */
 }
