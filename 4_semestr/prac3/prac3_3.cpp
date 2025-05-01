@@ -10,6 +10,8 @@
 #include <ostream>
 #include <stack>
 #include <iomanip>
+#include <unordered_map>
+#include <variant>
 
 
 using namespace std;
@@ -69,79 +71,88 @@ public:
 
     friend ostream &operator<<(ostream &s, Lex l );
 };
+typedef std::variant<int, bool, double, std::string> Value;
 
 class Ident {
-    string name;
-    bool declare;
+    std::string name;
+    bool declare = false;
     type_of_lex type;
-    bool assign;
-    int value;
-    bool is_label;
-    
+    bool assign = false;
+    bool is_label = false;
+    Value value;
 public:
-    Ident(): declare(false), assign(false) {} 
+    Ident() = default;
+    explicit Ident(const std::string &n)
+      : name(n) {}
 
-    bool operator==(const string &s) const {
-        return name == s; 
+    bool operator==(const std::string &s) const {
+        return name == s;
     }
 
-    explicit Ident(const string n): declare(false), assign(false) {
-        name = move(n);
+    const std::string &get_name() const {
+        return name;
     }
 
-    string get_name() const { 
-        return name; 
+    bool get_declare() const {
+        return declare;
     }
 
-    bool get_declare() const { 
-        return declare; 
+    void put_declare() {
+        declare = true;
     }
 
-    void put_declare() { 
-        declare = true; 
-    }
-
-    type_of_lex get_type() const { 
+    type_of_lex get_type() const {
         return type;
     }
 
-    void put_type(type_of_lex t) { 
-        type = t; 
+    void put_type(type_of_lex t) {
+        type = t;
+        // initialize default value based on declared type
+        switch (t) {
+            case LEX_INT:    value = 0;       break;
+            case LEX_BOOL:   value = false;   break;
+            case LEX_REAL:   value = 0.0;     break;
+            case LEX_STRING: value = std::string(); break;
+            default: break;
+        }
     }
 
-    bool get_assign() const { 
-        return assign; 
+    bool get_assign() const {
+        return assign;
     }
 
-    void put_assign() { 
-        assign = true; 
+    void put_assign() {
+        assign = true;
     }
 
-    int get_value() const { 
-        return value; 
+    Value get_value() const {
+        return value;
     }
 
-    void put_value(int v) { 
-        value = v; 
+    void put_value(const Value &v) {
+        // Optionally, check compatibility of v and type
+        value = v;
     }
 
-    bool get_is_label() const { 
-        return is_label; 
+    bool get_is_label() const {
+        return is_label;
     }
 
-    void put_is_label() { 
-        is_label = true; 
+    void put_is_label() {
+        is_label = true;
     }
 };
 
-vector<Ident> TID;
- 
-int put (const string &buf) {
-    vector<Ident>::iterator k;
-    if ((k = find(TID.begin(), TID.end(), buf)) != TID.end())
-        return k - TID.begin();
-    TID.push_back(Ident(buf));
-    return TID.size() - 1;
+// Global table of identifiers
+std::vector<Ident> TID;
+
+// Add or find an identifier by name, return its index
+int put(const std::string &buf) {
+    auto it = std::find(TID.begin(), TID.end(), buf);
+    if (it != TID.end())
+        return static_cast<int>(it - TID.begin());
+    TID.emplace_back(buf);
+    return static_cast<int>(TID.size() - 1);
 }
 
 class Scanner {
@@ -351,6 +362,9 @@ class Parser {
     
     public:
         vector<Lex> poliz; 
+        std::vector<std::vector<int>> break_stack;
+        unordered_map<int,int>    label_positions; 
+        vector<pair<int,int>>     unresolved_gotos; // список незакрытых goto: пара<позиция_в_poliz, id_метки>
         explicit Parser(const char *program);   // конструктор, принимает имя файла
         void analyze();                         // точка входа синтаксического анализа
     };
@@ -414,6 +428,15 @@ class Parser {
     
         // Конец файла
         if (c_type != LEX_FIN) throw curr_lex;
+               // Перед выводом POLIZ-а — бэчпатч всех forward-goto
+        for (auto &p : unresolved_gotos) {
+            int pos = p.first, id = p.second;
+            auto it = label_positions.find(id);
+            if (it == label_positions.end())
+                throw "undefined label for goto";
+            // заменяем placeholder-позицию на реальную
+            poliz[pos] = Lex(POLIZ_LABEL, it->second);
+        }
         cout << "Yes!!!" << endl;
             // красивый вывод ПОЛИЗа
         cout << "\n--- POLIZ (size=" << poliz.size() << ") ---\n";
@@ -489,6 +512,7 @@ class Parser {
                 st_lex.pop();
                 
                 poliz.push_back(Lex(LEX_ASSIGN));
+                TID[id].put_assign();
             }
         } while (c_type == LEX_COMMA && (gl(), true));
     }
@@ -510,7 +534,8 @@ class Parser {
         }
         else if (c_type == LEX_WHILE) {
             gl();             // съели 'while'
-            ++loop_depth;                // вошли в цикл
+            ++loop_depth;  
+            break_stack.emplace_back();              // вошли в цикл
             int pl0 = poliz.size();
             E(); eq_bool();   // условие
             // если есть 'do', то съём его
@@ -523,7 +548,13 @@ class Parser {
             poliz.push_back(Lex(POLIZ_LABEL, pl0));  // jump-back target
             poliz.push_back(Lex(POLIZ_GO));          // unconditional
             poliz[pl1] = Lex(POLIZ_LABEL, poliz.size());
+            int loop_end = poliz.size();
+            for (int pos : break_stack.back()) {
+                poliz[pos] = Lex(POLIZ_LABEL, loop_end);
+            }
+            break_stack.pop_back();
             --loop_depth;  
+            
         }
         else if (c_type == LEX_READ) {
             gl();              // 'read'
@@ -538,15 +569,20 @@ class Parser {
             poliz.push_back(Lex(LEX_READ));
         }
         else if (c_type == LEX_WRITE) {
+            
             gl();              // 'write'
             if (c_type != LEX_LPAREN) throw curr_lex;
             gl();              // '('
+
+            int arg_cnt = 0;
             do {
-                E();
-                st_lex.pop();  // убираем тип аргумента
+                E();                  // каждое E() запушило в poliz одно значение
+                st_lex.pop();         // убираем тип
+                ++arg_cnt;
             } while (c_type == LEX_COMMA && (gl(), true));
             if (c_type != LEX_RPAREN) throw curr_lex;
             gl();              // ')'
+            poliz.push_back(Lex(LEX_NUM, arg_cnt));
             poliz.push_back(Lex(LEX_WRITE));    
         }
         else if (c_type == LEX_LFIG) {
@@ -561,11 +597,17 @@ class Parser {
         }
         else if (c_type == LEX_ID) {
             Lex first = curr_lex;                    // запомнили ID
+            int id = first.get_value();
             gl();                                    // заглянули вперёд
             if (c_type == LEX_COLON) {               // =====  метка  id:
-                TID[first.get_value()].put_is_label();
-                gl();                                // съели ':'
-                S();                                 // оператор после метки
+                // 1) Помечаем в TID как метку
+                TID[id].put_is_label();
+                // 2) Запоминаем позицию этой метки в poliz и вставляем её туда:
+                int pos = poliz.size();
+                label_positions[id] = pos;
+                poliz.push_back(Lex(POLIZ_LABEL, pos));
+                gl();  // съели ':'
+                S();   // дальше оператор после метки                                // оператор после метки
             } else {                                 // =====  не метка  →  выражение
                 put_back(curr_lex);                  // вернули look‑ahead
                 curr_lex = first;                    // восстановили ID
@@ -581,21 +623,28 @@ class Parser {
             st_lex.pop();
         }
         else if (c_type == LEX_BREAK) {    // <— новый кейс для break
-            if (loop_depth == 0)
-                throw "break outside loop";       // вне циклов нельзя
-            /* если break допустим, просто читаем и кладём метку,
-            которая при интерпретации будет «перепрыгивать» дальше */
-            poliz.push_back(Lex(POLIZ_GO));       // (простейшая реализация)
-            gl();                        // просто «съедаем» break
+            if (loop_depth == 0) throw "break outside loop";
+            // 1) вставляем placeholder-метку и GO
+            int pos = poliz.size();
+            poliz.push_back(Lex(POLIZ_LABEL, 0));
+            poliz.push_back(Lex(POLIZ_GO));
+            // 2) запоминаем, чтобы потом патчить:
+            break_stack.back().push_back(pos);
+            gl();
         }
         else if (c_type == LEX_GOTO) {
-            gl(); // Съели 'goto'
+            gl();  // 'goto'
             if (c_type != LEX_ID) throw curr_lex;
-            check_label(); // Проверяем, что это метка
-            gl(); // Съели ID
-            // После goto label ожидается ;
+            int id = c_val;
+            gl();  // ID
             if (c_type != LEX_SEMICOLON) throw curr_lex;
-            // Не съедаем ; здесь, так как это сделает вызывающий код
+            // 1) В poliz вставляем placeholder-метку и GO
+            int pos = poliz.size();
+            poliz.push_back(Lex(POLIZ_LABEL, 0));  // сюда позже подставим правильную позицию
+            poliz.push_back(Lex(POLIZ_GO));
+            // 2) Запомним этот goto для последующего бэчпатча
+            unresolved_gotos.emplace_back(pos, id);
+            // ';' скушает внешний код
         }
         else {
             throw curr_lex;
@@ -670,6 +719,7 @@ class Parser {
                 E();                                       // rhs
                 eq_type();                                 // типы lhs / rhs
                 poliz.push_back(Lex(LEX_ASSIGN));          // сам ":="
+                TID[id].put_assign();
             }
             else {
                 /* ----- обычное использование переменной ----- */
@@ -680,6 +730,11 @@ class Parser {
                 curr_lex = id_lex;       // восстановили текущий токен
                 c_type   = id_lex.get_type();
                 c_val    = id_lex.get_value();
+
+                if (!TID[id].get_declare())
+                    throw "identifier not declared";
+                if (!TID[id].get_assign())                
+                    throw "variable used before assignment";
             
                 gl();                    // идём дальше
             }
@@ -800,11 +855,276 @@ class Parser {
         }
     }
 
+// Value can hold int, bool, double or string
+typedef std::variant<int, bool, double, std::string> Value;
+
+// Helper for printing a Value
+struct ValuePrinter {
+    void operator()(int v) const           { std::cout << v; }
+    void operator()(bool v) const          { std::cout << (v ? "true" : "false"); }
+    void operator()(double v) const        { std::cout << v; }
+    void operator()(const std::string &v) const { std::cout << v; }
+};
+
+class Executer {
+public:
+    void execute(const std::vector<Lex> &poliz);
+private:
+    // Pop a Value from stack
+    Value pop(std::stack<Value> &st) {
+        Value v = st.top(); st.pop();
+        return v;
+    }
+};
+
+void Executer::execute(const std::vector<Lex> &poliz) {
+    std::stack<Value> args;
+    for (size_t idx = 0; idx < poliz.size(); ++idx) {
+        const Lex &pc = poliz[idx];
+        switch (pc.get_type()) {
+            case LEX_NUM:
+                args.push(pc.get_value());
+                break;
+
+            case LEX_TRUE:
+                args.push(true);
+                break;
+            case LEX_FALSE:
+                args.push(false);
+                break;
+
+            case LEX_REAL_CONST:
+                args.push(pc.get_dval());
+                break;
+
+            case LEX_STR:
+                args.push(pc.get_slex());
+                break;
+
+            case POLIZ_ADDRESS:
+            case POLIZ_LABEL:
+                args.push(pc.get_value());
+                break;
+
+            case LEX_ID: {
+                int id = pc.get_value();
+                if (!TID[id].get_assign())
+                    throw "POLIZ: indefinite identifier";
+                args.push(TID[id].get_value()); // assumes Ident::get_value() returns Value
+                break;
+            }
+
+            case LEX_NOT: {
+                Value v = pop(args);
+                if (auto p = std::get_if<bool>(&v)) args.push(!*p);
+                else throw "POLIZ: not applied to non-bool";
+                break;
+            }
+
+            case LEX_AND:
+            case LEX_OR: {
+                Value v2 = pop(args), v1 = pop(args);
+                if (!std::holds_alternative<bool>(v1) || !std::holds_alternative<bool>(v2))
+                    throw "POLIZ: &&/|| on non-bool";
+                bool b1 = std::get<bool>(v1);
+                bool b2 = std::get<bool>(v2);
+                args.push(pc.get_type() == LEX_AND ? (b1 && b2) : (b1 || b2));
+                break;
+            }
+
+            case POLIZ_GO: {
+                int dest = std::get<int>(pop(args));
+                idx = dest - 1;
+                break;
+            }
+
+            case POLIZ_FGO: {
+                int dest = std::get<int>(pop(args));
+                bool cond = std::get<bool>(pop(args));
+                if (!cond) idx = dest - 1;
+                break;
+            }
+
+            case LEX_WRITE: {
+                // сначала достаём, сколько аргументов нужно вывести
+                int n = std::get<int>( pop(args) );
+                // забираем их в вектор (они лежат в обратном порядке!)
+                std::vector<Value> out;
+                out.reserve(n);
+                for (int k = 0; k < n; ++k) {
+                    out.push_back( pop(args) );
+                }
+                // восстанавливаем нормальный порядок
+                std::reverse(out.begin(), out.end());
+                // выводим их подряд через пробел
+                for (size_t i = 0; i < out.size(); ++i) {
+                    std::visit(ValuePrinter(), out[i]);
+                    if (i + 1 < out.size()) std::cout << ' ';
+                }
+                std::cout << '\n';
+                break;
+            }
+
+            case LEX_READ: {
+                int id = std::get<int>(pop(args));
+                Value input;
+                switch (TID[id].get_type()) {
+                    case LEX_INT: {
+                        int i; std::cin >> i;
+                        input = i;
+                        break;
+                    }
+                    case LEX_BOOL: {
+                        std::string s;
+                        while (std::cin >> s) {
+                            if (s == "true" || s == "false") break;
+                            std::cout << "Input true/false" << std::endl;
+                        }
+                        input = (s == "true");
+                        break;
+                    }
+                    case LEX_REAL: {
+                        double d; std::cin >> d;
+                        input = d;
+                        break;
+                    }
+                    case LEX_STRING: {
+                        std::string str; std::cin >> str;
+                        input = str;
+                        break;
+                    }
+                    default:
+                        throw "POLIZ: read to non-variable";
+                }
+                TID[id].put_value(input); // assumes Ident::put_value(Value)
+                TID[id].put_assign();
+                break;
+            }
+
+            case LEX_PLUS:
+            case LEX_MINUS:
+            case LEX_TIMES:
+            case LEX_SLASH: {
+                Value v2 = pop(args), v1 = pop(args);
+                // Integer arithmetic
+                if (std::holds_alternative<int>(v1) && std::holds_alternative<int>(v2)) {
+                    int a = std::get<int>(v1), b = std::get<int>(v2);
+                    switch (pc.get_type()) {
+                        case LEX_PLUS:  args.push(a + b); break;
+                        case LEX_MINUS: args.push(a - b); break;
+                        case LEX_TIMES: args.push(a * b); break;
+                        case LEX_SLASH:
+                            if (b == 0) throw "POLIZ: divide by zero";
+                            args.push(a / b);
+                            break;
+                        default: break;
+                    }
+                }
+                // Real arithmetic
+                else if (std::holds_alternative<double>(v1) && std::holds_alternative<double>(v2)) {
+                    double a = std::get<double>(v1), b = std::get<double>(v2);
+                    switch (pc.get_type()) {
+                        case LEX_PLUS:  args.push(a + b); break;
+                        case LEX_MINUS: args.push(a - b); break;
+                        case LEX_TIMES: args.push(a * b); break;
+                        case LEX_SLASH:
+                            if (b == 0.0) throw "POLIZ: divide by zero";
+                            args.push(a / b);
+                            break;
+                        default: break;
+                    }
+                }
+                // String concatenation
+                else if (pc.get_type() == LEX_PLUS &&
+                         std::holds_alternative<std::string>(v1) &&
+                         std::holds_alternative<std::string>(v2)) {
+                    args.push(std::get<std::string>(v1) + std::get<std::string>(v2));
+                }
+                else throw "POLIZ: type mismatch in arithmetic";
+                break;
+            }
+
+            case LEX_EQ:
+            case LEX_NEQ:
+            case LEX_GTR:
+            case LEX_LSS:
+            case LEX_GEQ:
+            case LEX_LEQ: {
+                Value v2 = pop(args), v1 = pop(args);
+                bool result;
+                // Integer comparisons
+                if (std::holds_alternative<int>(v1) && std::holds_alternative<int>(v2)) {
+                    int a = std::get<int>(v1), b = std::get<int>(v2);
+                    switch (pc.get_type()) {
+                        case LEX_EQ:  result = (a == b); break;
+                        case LEX_NEQ: result = (a != b); break;
+                        case LEX_GTR: result = (a >  b); break;
+                        case LEX_LSS: result = (a <  b); break;
+                        case LEX_GEQ: result = (a >= b); break;
+                        case LEX_LEQ: result = (a <= b); break;
+                        default:    result = false;
+                    }
+                }
+                // Real comparisons
+                else if (std::holds_alternative<double>(v1) && std::holds_alternative<double>(v2)) {
+                    double a = std::get<double>(v1), b = std::get<double>(v2);
+                    switch (pc.get_type()) {
+                        case LEX_EQ:  result = (a == b); break;
+                        case LEX_NEQ: result = (a != b); break;
+                        case LEX_GTR: result = (a >  b); break;
+                        case LEX_LSS: result = (a <  b); break;
+                        case LEX_GEQ: result = (a >= b); break;
+                        case LEX_LEQ: result = (a <= b); break;
+                        default:    result = false;
+                    }
+                }
+                // String equality/inequality
+                else if (std::holds_alternative<std::string>(v1) &&
+                         std::holds_alternative<std::string>(v2) &&
+                         (pc.get_type() == LEX_EQ || pc.get_type() == LEX_NEQ)) {
+                    const auto &s1 = std::get<std::string>(v1);
+                    const auto &s2 = std::get<std::string>(v2);
+                    result = (pc.get_type() == LEX_EQ ? (s1 == s2) : (s1 != s2));
+                }
+                else throw "POLIZ: type mismatch in comparison";
+                args.push(result);
+                break;
+            }
+
+            case LEX_ASSIGN: {
+                Value val = pop(args);
+                int id    = std::get<int>(pop(args));
+                TID[id].put_value(val); // assumes Ident::put_value(Value)
+                TID[id].put_assign();
+                args.push(val);
+                break;
+            }
+
+            default:
+                throw "POLIZ: unexpected elem";
+        }
+    }
+    std::cout << "Finish of executing!!!" << std::endl;
+}
+
+class Interpretator { 
+    Parser pars; 
+    Executer E; 
+public: 
+    Interpretator (const char * program) : pars(program) { }; 
+    void interpretation ( ); 
+};  
+
+void Interpretator :: interpretation ( ) { 
+    pars.analyze ( ); 
+    E.execute ( pars.poliz ); 
+}
+
 
 int main() {
     try {
-        Parser parser("1.txt");
-        parser.analyze();
+        Interpretator i("1.txt");
+        i.interpretation();
         return 0;
     }
     catch (char c) {
