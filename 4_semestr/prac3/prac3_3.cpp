@@ -1104,7 +1104,6 @@ void Executer::execute(const std::vector<Lex> &poliz) {
                 throw "POLIZ: unexpected elem";
         }
     }
-    std::cout << "Finish of executing!!!" << std::endl;
 }
 
 class Interpretator { 

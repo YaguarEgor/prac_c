@@ -5,19 +5,19 @@ program {
     
 
     f = (d - e) * 3;
-    e = f = 45;
+    e = f = d;
     
     0;  
     if (f < 50 or p == r) {
-        write(f);                   /* ожидаем «45» */
-        write(p + r + q, f + e);    /* ожидаем «foobar45 90» */
+        write(f);                   /* ожидаем d */
+        write(p + r + q, f + e);    /* ожидаем «foobar45 2*d» */
     } else {
         write(100);
     }
 
     while (flag) {
         f = f - 10;          
-        write(f);            /* ожидаем «35» */
+        write(f);            /* ожидаем «d-10» */
         flag = false;        
     }
 
